@@ -1,0 +1,302 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      fvModels;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+degassingMassSource
+{
+
+    type            coded;
+    active          yes;
+    selectionMode   all;
+
+
+    name            degassingMassSource;
+    field           thermo:rho.air;  
+    patches         (outlet);
+    rhoName         thermo:rho.air;
+    alphaName       alpha.air;
+
+
+    scalarCodedSourceCoeffs
+    {
+        selectionMode   all;
+
+        fields          (thermo:rho.air);
+
+        codeInclude
+        #{
+             #include "fvm.H"
+             #include "volFields.H"
+        #};
+
+        codeCorrect
+        {
+
+        };
+
+        codeAddSup
+        #{
+            
+             DynamicList<word, 1, 0> patches;
+             coeffs().lookup("patches") >> patches;
+
+             const word rhoName = coeffs().lookup("rhoName");
+             const volScalarField& rhoAir = mesh().lookupObject<volScalarField>(rhoName);
+             const word alphaName = coeffs().lookup("alphaName");
+             volScalarField& alphaAir = const_cast<volScalarField&>(mesh().lookupObject<volScalarField>(alphaName));
+
+             const scalar deltaT = mesh().time().deltaT().value();
+
+             volScalarField degassingMassSourceCoeff
+             (
+                 IOobject
+                 (
+                     "degassingMassSourceCoeff",
+                     mesh().time().timeName(),
+                     mesh(),
+                     IOobject::NO_READ,
+                     IOobject::AUTO_WRITE
+                 ),
+                 mesh(),
+                 dimensionedScalar("degassingMassSourceCoeff", dimless/dimTime, 0.0)
+             );
+
+             forAll(patches, iPatch)
+             {
+
+                 const fvPatch& patch = mesh().boundary()[patches[iPatch]];
+
+                 forAll(patch, iFace)
+                 {
+                     label iCell = patch.faceCells()[iFace];
+                     degassingMassSourceCoeff[iCell] = -alphaAir[iCell]/deltaT;
+                 }
+             }
+
+             eqn += fvm::Sp(degassingMassSourceCoeff, rhoAir);
+
+             alphaAir = max(alphaAir, 0.0);
+             alphaAir = min(alphaAir, 1.0);
+        };
+
+        codeSetValue
+        {
+
+        };
+
+
+        code
+        #{
+            $codeInclude
+            $codeCorrect
+            $codeAddSup
+            $codeSetValue
+        #};
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+
+degassingForce
+{
+    type            coded;
+    active          yes;
+    selectionMode   all;
+
+    name            degassingForce;
+    field           U.air;  
+    patches         (outlet);
+    rhoName         thermo:rho.air;
+    alphaName       alpha.air;
+    UName           U.air;
+
+
+    vectorCodedSourceCoeffs
+    {
+        selectionMode   all;
+
+        fields          (U.air);
+
+        codeInclude
+        #{
+             #include "fvm.H"
+             #include "volFields.H"
+        #};
+
+        codeCorrect
+        {
+
+        };
+
+        codeAddSup
+        #{
+
+             DynamicList<word, 1, 0> patches;
+             coeffs().lookup("patches") >> patches;
+
+             const word rhoName = coeffs().lookup("rhoName");
+             const volScalarField& rhoAir = mesh().lookupObject<volScalarField>(rhoName);
+             const word alphaName = coeffs().lookup("alphaName");
+             const volScalarField& alphaAir = mesh().lookupObject<volScalarField>(alphaName);
+             const word UName = coeffs().lookup("UName");
+             const volVectorField& UAir = mesh().lookupObject<volVectorField>(UName);
+
+             const scalar deltaT = mesh().time().deltaT().value();
+
+             volScalarField degassingForceCoeff
+             (
+                 IOobject
+                 (
+                     "degassingForceCoeff",
+                     mesh().time().timeName(),
+                     mesh(),
+                     IOobject::NO_READ,
+                     IOobject::AUTO_WRITE
+                 ),
+                 mesh(),
+                 dimensionedScalar("degassingForceCoeff", dimDensity/dimTime, 0.0)
+             );
+
+             forAll(patches, iPatch)
+             {
+
+                 const fvPatch& patch = mesh().boundary()[patches[iPatch]];
+
+                 forAll(patch, iFace)
+                 {
+                     label iCell = patch.faceCells()[iFace];
+                     degassingForceCoeff[iCell] = -rhoAir[iCell]*alphaAir[iCell]/deltaT;
+                 }
+             }
+
+             eqn += fvm::Sp(degassingForceCoeff, UAir);
+
+             const_cast<volScalarField&>(alphaAir) = max(alphaAir, 0.0);
+             const_cast<volScalarField&>(alphaAir) = min(alphaAir, 1.0);
+        };
+
+        codeSetValue
+        {
+
+        };
+
+
+        code
+        #{
+            $codeInclude
+            $codeCorrect
+            $codeAddSup
+            $codeSetValue
+        #};
+    }
+}
+
+
+
+degassingForceWater
+{
+    type            coded;
+    active          yes;
+    selectionMode   all;
+
+    name            degassingForceWater;
+    field           U.water;  
+    patches         (outlet);
+    rhoName         thermo:rho.air;      // 修改为空气的密度
+    alphaName       alpha.air;           // 修改为空气的体积分数
+    UName           U.water;
+
+
+    vectorCodedSourceCoeffs
+    {
+        selectionMode   all;
+
+        fields          (U.water);
+
+        codeInclude
+        #{
+             #include "fvm.H"
+             #include "volFields.H"
+        #};
+
+        codeCorrect
+        {
+
+        };
+
+        codeAddSup
+        #{
+
+             DynamicList<word, 1, 0> patches;
+             coeffs().lookup("patches") >> patches;
+
+             const word rhoName = coeffs().lookup("rhoName");
+             const volScalarField& rhoAir = mesh().lookupObject<volScalarField>(rhoName); // 使用空气密度
+             const word alphaName = coeffs().lookup("alphaName");
+             const volScalarField& alphaAir = mesh().lookupObject<volScalarField>(alphaName); // 使用空气体积分数
+             const word UName = coeffs().lookup("UName");
+             const volVectorField& UWater = mesh().lookupObject<volVectorField>(UName);
+
+             const scalar deltaT = mesh().time().deltaT().value();
+
+             volScalarField degassingForceCoeff
+             (
+                 IOobject
+                 (
+                     "degassingForceCoeff",
+                     mesh().time().timeName(),
+                     mesh(),
+                     IOobject::NO_READ,
+                     IOobject::AUTO_WRITE
+                 ),
+                 mesh(),
+                 dimensionedScalar("degassingForceCoeff", dimDensity/dimTime, 0.0)
+             );
+
+             forAll(patches, iPatch)
+             {
+                 const fvPatch& patch = mesh().boundary()[patches[iPatch]];
+
+                 forAll(patch, iFace)
+                 {
+                     label iCell = patch.faceCells()[iFace];
+                     degassingForceCoeff[iCell] = -rhoAir[iCell]*alphaAir[iCell]/deltaT;
+                 }
+             }
+
+             eqn += fvm::Sp(degassingForceCoeff, UWater);
+
+             const_cast<volScalarField&>(alphaAir) = max(alphaAir, 0.0);
+             const_cast<volScalarField&>(alphaAir) = min(alphaAir, 1.0);
+        };
+
+        codeSetValue
+        {
+
+        };
+
+
+        code
+        #{
+            $codeInclude
+            $codeCorrect
+            $codeAddSup
+            $codeSetValue
+        #};
+    }
+}
+
+// ************************************************************************* //

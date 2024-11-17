@@ -1,0 +1,3 @@
+degassingBC/degassingBC.C
+
+LIB = $(FOAM_USER_LIBBIN)/libaddonMultiphaseEulerFoamFvModels

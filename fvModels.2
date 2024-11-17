@@ -1,0 +1,205 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     10.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+degassingMassSource
+{
+    type            coded;
+    active          yes;
+    selectionMode   cellSet;
+	cellSet 		out;
+    field 	    	thermo:rho.air;
+    name            degassingMassSource;
+    rhoName         thermo:rho.air;
+    alphaName       alpha.air;
+
+
+    codeInclude
+    #{
+         #include "fvm.H"
+		 #include "cellSet.H"
+    #};
+
+
+    codeAddRhoSup
+    #{
+    
+    	 Info << "**codeAddSup**" << endl;
+         const word rhoName = coeffs().lookup("rhoName");
+         const volScalarField& rhoAir = mesh().lookupObject<volScalarField>(rhoName);
+         const word alphaName = coeffs().lookup("alphaName");
+         const volScalarField& alphaAir = mesh().lookupObject<volScalarField>(alphaName);
+         const scalar deltaT = mesh().time().deltaT().value();
+
+         volScalarField degassingMassSourceCoeff
+         (
+             IOobject
+             (
+                 "degassingMassSourceCoeff",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE
+             ),
+             mesh(),
+             dimensionedScalar("degassingMassSourceCoeff", dimless/dimTime, 0.0)
+         );
+
+			cellSet outCells(mesh(), "out");
+			forAllConstIter(cellSet, outCells, iter)
+			{
+				label cellI = iter.key(); 
+				degassingMassSourceCoeff[cellI] = -alphaAir[cellI] / deltaT;
+			}
+
+         eqn += fvm::Sp(degassingMassSourceCoeff, rhoAir);
+    #};
+    
+    codeOptions
+	#{
+	-I$(LIB_SRC)/finiteVolume/lnInclude \
+	-I$(LIB_SRC)/meshTools/lnInclude
+	#};
+
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+
+recoilAir1
+{
+    type            coded;
+    active          yes;
+    selectionMode   cellSet;
+	cellSet 		out;
+    field 	     	U.air;
+    name            recoilAir1;
+    patches         (outlet);
+    rhoName         thermo:rho.air;
+    alphaName       alpha.air;
+    UName           U.air;
+
+   
+    codeInclude
+    #{
+         #include "fvm.H"
+    #};
+
+    codeAddRhoSup
+    #{
+         const word rhoName = coeffs().lookup("rhoName");
+         const volScalarField& rhoAir = mesh().lookupObject<volScalarField>(rhoName);
+         const word alphaName = coeffs().lookup("alphaName");
+         const volScalarField& alphaAir = mesh().lookupObject<volScalarField>(alphaName);
+         const word UName = coeffs().lookup("UName");
+         const volVectorField& UAir = mesh().lookupObject<volVectorField>(UName);
+         const scalar deltaT = mesh().time().deltaT().value();
+
+         volScalarField degassingForceCoeff
+         (
+             IOobject
+             (
+                 "degassingForceCoeff",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE
+             ),
+             mesh(),
+             dimensionedScalar("degassingForceCoeff", dimDensity/dimTime, 0.0)
+         );
+
+
+			cellSet outCells(mesh(), "out");
+			forAllConstIter(cellSet, outCells, iter)
+			{
+				label cellI = iter.key(); 
+				degassingForceCoeff[cellI] = -rhoAir[cellI]*alphaAir[cellI]/deltaT;
+			}
+
+         // Add the degassing force term
+         eqn += fvm::Sp(degassingForceCoeff, UAir);
+    #};
+    
+    codeOptions
+	#{
+	-I$(LIB_SRC)/finiteVolume/lnInclude \
+	-I$(LIB_SRC)/meshTools/lnInclude
+	#};
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+
+recoilWater
+{
+    type            coded;
+    active          yes;
+    selectionMode   cellSet;
+	cellSet 		out;
+    field 	     	U.water;
+    name            recoilWater;
+    patches         (outlet);
+    rhoName         thermo:rho.air;
+    alphaName       alpha.air;
+    UName           U.water;
+
+   
+    codeInclude
+    #{
+         #include "fvm.H"
+    #};
+
+    codeAddRhoSup
+    #{
+         const word rhoName = coeffs().lookup("rhoName");
+         const volScalarField& rhoAir = mesh().lookupObject<volScalarField>(rhoName);
+         const word alphaName = coeffs().lookup("alphaName");
+         const volScalarField& alphaAir = mesh().lookupObject<volScalarField>(alphaName);
+         const word UName = coeffs().lookup("UName");
+         const volVectorField& UWater = mesh().lookupObject<volVectorField>(UName);
+         const scalar deltaT = mesh().time().deltaT().value();
+         volScalarField degassingForceCoeff
+         (
+             IOobject
+             (
+                 "degassingForceCoeff",
+                 mesh().time().timeName(),
+                 mesh(),
+                 IOobject::NO_READ,
+                 IOobject::AUTO_WRITE
+             ),
+             mesh(),
+             dimensionedScalar("degassingForceCoeff", dimDensity/dimTime, 0.0)
+         );
+			cellSet outCells(mesh(), "out");
+			forAllConstIter(cellSet, outCells, iter)
+			{
+				label cellI = iter.key(); 
+				degassingForceCoeff[cellI] = -rhoAir[cellI]*alphaAir[cellI]/deltaT;
+			}
+
+         // Add the degassing force term
+         eqn += fvm::Sp(degassingForceCoeff, UWater);
+    #};
+    
+    codeOptions
+	#{
+	-I$(LIB_SRC)/finiteVolume/lnInclude \
+	-I$(LIB_SRC)/meshTools/lnInclude
+	#};
+}
+
+// ************************************************************************* //
+
